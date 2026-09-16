@@ -40,3 +40,14 @@ A temporary add-on is removed when Firefox restarts, so repeat step 2 after a re
 ```sh
 node --test test/
 ```
+
+## Icons and store assets
+
+`icons/` and the Chrome Web Store images in `store/` are rendered from `store/assets.html`. After editing it, regenerate the PNGs with installed Chrome:
+
+```sh
+npm install --no-save playwright-core
+node store/render.mjs
+```
+
+Listing copy is in `store/listing.md`. When zipping the extension for upload, leave out `store/` and `test/`.
