@@ -30,7 +30,9 @@
 
   // ---- Settings -------------------------------------------------------------
 
-  const extensionStorage = globalThis.chrome?.storage;
+  // Firefox exposes the promise-based APIs as `browser`; `chrome` there is the callback flavour.
+  const extensionApi = globalThis.browser ?? globalThis.chrome;
+  const extensionStorage = extensionApi?.storage;
   const settings = { foldByDefault: false, foldOverrides: {} };
   let settingsLoaded = !extensionStorage;
 
