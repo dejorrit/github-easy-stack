@@ -4,6 +4,12 @@
   "version": "0.2.0",
   "description": "Groups stacked pull requests in GitHub pull request lists, with fold and progress per stack.",
   "permissions": ["storage"],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "github-easy-stack@dejorrit.github.io",
+      "strict_min_version": "109.0"
+    }
+  },
   "action": {
     "default_title": "GitHub Easy Stack",
     "default_popup": "popup/popup.html"

@@ -1,6 +1,6 @@
 # GitHub Easy Stack
 
-Chrome extension that groups [stacked pull requests](https://docs.github.com/en/pull-requests/how-tos/stacked-pull-requests) in GitHub's pull request lists.
+Browser extension for Chrome and Firefox that groups [stacked pull requests](https://docs.github.com/en/pull-requests/how-tos/stacked-pull-requests) in GitHub's pull request lists.
 
 - **Always grouped**: stack members are shown together under a stack header, even if other PRs sat between them. Open members that aren't on the current page (pagination, filters) show up as compact placeholder rows.
 - **Progress**: the header shows a progress bar and counts: merged, ready, in progress, blocked, draft, not on this page.
@@ -11,16 +11,29 @@ A PR counts as *ready* when it has no requested changes, no failing checks and i
 
 ## Install
 
+**Chrome**
+
 1. Open `chrome://extensions` and enable **Developer mode**.
 2. Click **Load unpacked** and select this folder.
 3. Reload a GitHub pull request list.
+
+**Firefox** (109 or later)
+
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Click **Load Temporary Add-on** and select this folder's `manifest.json`.
+3. Reload a GitHub pull request list.
+
+A temporary add-on is removed when Firefox restarts, so repeat step 2 after a restart.
 
 ## How it works
 
 - Rows are found by GitHub's stack badge (`aria-label="Pull request stack, position X of Y"`). The badge doesn't say *which* stack a PR is in, and position/size alone can't tell apart two stacks of the same size.
 - For each stack, the extension makes one same-origin request with your GitHub session. It first tries `/{owner}/{repo}/pull/{n}/page_data/stack` (the endpoint GitHub's badge popup uses), then falls back to the stack JSON embedded in the PR page. The response lists every PR in the stack with its title and state.
 - Rows are regrouped with CSS `order` on the existing list items instead of moving GitHub's DOM nodes, so GitHub's React code keeps working. Keyboard navigation still follows GitHub's original order.
-- Fold state per stack is kept in `chrome.storage.local`; the default lives in `chrome.storage.sync`.
+- Fold state per stack is kept in `storage.local`; the default lives in `storage.sync`. The APIs are reached
+  through `browser` when it exists and `chrome` otherwise, because Firefox's `chrome` alias is the
+  callback flavour and doesn't return promises. `storage.sync` needs an add-on ID on Firefox, which is why
+  the manifest carries a `browser_specific_settings.gecko.id`.
 
 ## Tests
 

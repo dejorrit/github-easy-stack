@@ -1,10 +1,13 @@
+// Firefox exposes the promise-based APIs as `browser`; `chrome` there is the callback flavour.
+const extensionApi = globalThis.browser ?? globalThis.chrome;
+
 const checkbox = document.getElementById("fold-by-default");
 
-chrome.storage.sync.get({ foldByDefault: false }).then(({ foldByDefault }) => {
+extensionApi.storage.sync.get({ foldByDefault: false }).then(({ foldByDefault }) => {
   checkbox.checked = foldByDefault;
 });
 
 checkbox.addEventListener("change", () => {
-  chrome.storage.sync.set({ foldByDefault: checkbox.checked });
-  chrome.storage.local.set({ foldOverrides: {} });
+  extensionApi.storage.sync.set({ foldByDefault: checkbox.checked });
+  extensionApi.storage.local.set({ foldOverrides: {} });
 });
