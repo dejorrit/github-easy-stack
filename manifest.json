@@ -1,8 +1,13 @@
 {
   "manifest_version": 3,
   "name": "GitHub Easy Stack",
-  "version": "0.1.0",
-  "description": "Draws a line connecting stacked pull requests in GitHub pull request lists.",
+  "version": "0.2.0",
+  "description": "Groups stacked pull requests in GitHub pull request lists, with fold and progress per stack.",
+  "permissions": ["storage"],
+  "action": {
+    "default_title": "GitHub Easy Stack",
+    "default_popup": "popup/popup.html"
+  },
   "content_scripts": [
     {
       "matches": ["https://github.com/*"],

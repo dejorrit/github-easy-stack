@@ -4,10 +4,81 @@
   const LIST_SELECTOR = 'ul[data-listview-component="items-list"]';
   const TITLE_SELECTOR = 'a[data-testid="listitem-title-link"]';
   const BADGE_SELECTOR = 'button[aria-label^="Pull request stack"]';
+  const REVIEW_SELECTOR = '[data-testid="review-decision-icon"] button[aria-label]';
+  const CHECKS_SELECTOR = 'button[data-testid="checks-status-badge-button"]';
+  const DRAFT_SELECTOR = 'svg[aria-label="Draft pull request"], svg.octicon-git-pull-request-draft';
   const LEADING_ICON_SELECTOR = '[class*="LeadingContent-module__container"] svg';
-  const LANE_WIDTH = 12;
   const MAX_CONCURRENT_FETCHES = 3;
   const RETRY_FAILED_AFTER_MS = 60_000;
+
+  const STATUS_LABELS = {
+    merged: "merged",
+    ready: "ready",
+    waiting: "in progress",
+    blocked: "blocked",
+    draft: "draft",
+    unknown: "not on this page",
+    closed: "closed",
+  };
+
+  const ICONS = {
+    chevron: "M12.78 5.22a.749.749 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.06 0L3.22 6.28a.749.749 0 1 1 1.06-1.06L8 8.939l3.72-3.719a.749.749 0 0 1 1.06 0Z",
+    stack:
+      "M7.122.392a1.75 1.75 0 0 1 1.756 0l5.003 2.902c.83.481.83 1.68 0 2.162L8.878 8.358a1.75 1.75 0 0 1-1.756 0L2.119 5.456a1.251 1.251 0 0 1 0-2.162ZM8.125 1.69a.248.248 0 0 0-.25 0l-4.63 2.685 4.63 2.685a.248.248 0 0 0 .25 0l4.63-2.685ZM1.601 7.789a.75.75 0 0 1 1.025-.273l5.249 3.044a.248.248 0 0 0 .25 0l5.249-3.044a.75.75 0 0 1 .752 1.298l-5.248 3.044a1.75 1.75 0 0 1-1.756 0L1.874 8.814A.75.75 0 0 1 1.6 7.789Zm0 3.5a.75.75 0 0 1 1.025-.273l5.249 3.044a.248.248 0 0 0 .25 0l5.249-3.044a.75.75 0 0 1 .752 1.298l-5.248 3.044a1.75 1.75 0 0 1-1.756 0l-5.248-3.044a.75.75 0 0 1-.273-1.025Z",
+    pull: "M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z",
+  };
+
+  // ---- Settings -------------------------------------------------------------
+
+  const extensionStorage = globalThis.chrome?.storage;
+  const settings = { foldByDefault: false, foldOverrides: {} };
+  let settingsLoaded = !extensionStorage;
+
+  function loadSettings() {
+    if (!extensionStorage) return;
+    try {
+      Promise.all([
+        extensionStorage.sync.get({ foldByDefault: false }),
+        extensionStorage.local.get({ foldOverrides: {} }),
+      ])
+        .then(([sync, local]) => {
+          settings.foldByDefault = Boolean(sync.foldByDefault);
+          settings.foldOverrides = local.foldOverrides || {};
+        })
+        .finally(() => {
+          settingsLoaded = true;
+          scheduleUpdate();
+        });
+      extensionStorage.onChanged.addListener((changes) => {
+        if (changes.foldByDefault) settings.foldByDefault = Boolean(changes.foldByDefault.newValue);
+        if (changes.foldOverrides) settings.foldOverrides = changes.foldOverrides.newValue || {};
+        scheduleUpdate();
+      });
+    } catch {
+      settingsLoaded = true;
+    }
+  }
+
+  function isFolded(stackId) {
+    const overrides = settings.foldOverrides;
+    return Object.hasOwn(overrides, stackId) ? overrides[stackId] : settings.foldByDefault;
+  }
+
+  function toggleFold(stackId) {
+    const folded = !isFolded(stackId);
+    const overrides = { ...settings.foldOverrides };
+    if (folded === settings.foldByDefault) delete overrides[stackId];
+    else overrides[stackId] = folded;
+    settings.foldOverrides = overrides;
+    try {
+      extensionStorage?.local.set({ foldOverrides: overrides });
+    } catch {
+      // extension was reloaded; keep the in-page state
+    }
+    scheduleUpdate();
+  }
+
+  // ---- Stack data -------------------------------------------------------------
 
   // "owner/repo#number" -> { stack } | { failedAt }
   const cache = new Map();
@@ -83,123 +154,226 @@
     }
   }
 
+  // ---- Rendering --------------------------------------------------------------
+
+  function svgIcon(path, className) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("width", "16");
+    svg.setAttribute("height", "16");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("class", className);
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("d", path);
+    svg.appendChild(p);
+    return svg;
+  }
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
   function readRow(li) {
     const pull = core.parsePullHref(li.querySelector(TITLE_SELECTOR)?.getAttribute("href"));
     const badge = core.parseStackLabel(li.querySelector(BADGE_SELECTOR)?.getAttribute("aria-label"));
-    return { li, pull, badge };
+    return {
+      li,
+      pull,
+      badge,
+      review: core.parseReviewLabel(li.querySelector(REVIEW_SELECTOR)?.getAttribute("aria-label")),
+      checks: core.parseChecksLabel(li.querySelector(CHECKS_SELECTOR)?.getAttribute("aria-label")),
+      draft: Boolean(li.querySelector(DRAFT_SELECTOR)),
+    };
   }
 
-  function dotOffset(li) {
-    const icon = li.querySelector(LEADING_ICON_SELECTOR);
-    if (!icon) return 24;
+  function dotOffset(item, node) {
+    if (item.kind !== "row") return "50%";
+    const icon = node.querySelector(LEADING_ICON_SELECTOR);
+    if (!icon) return "24px";
     const iconRect = icon.getBoundingClientRect();
-    return Math.round(iconRect.top + iconRect.height / 2 - li.getBoundingClientRect().top);
+    return `${Math.round(iconRect.top + iconRect.height / 2 - node.getBoundingClientRect().top)}px`;
   }
 
-  function clearList(list) {
-    list.querySelectorAll(":scope > li > .ges-rail").forEach((rail) => rail.remove());
-    list.querySelectorAll(":scope > li[data-ges-stack]").forEach((li) => {
-      li.removeAttribute("data-ges-stack");
-      li.removeAttribute("data-ges-hl");
-    });
-    list.removeAttribute("data-ges-lanes");
-    list.style.removeProperty("--ges-gutter");
-    list.style.removeProperty("--ges-base-pad");
-  }
-
-  function renderRail(li, segments, stacks) {
-    let rail = li.querySelector(":scope > .ges-rail");
-    if (!segments.length) {
-      rail?.remove();
-      li.removeAttribute("data-ges-stack");
-      return;
-    }
-    const y = dotOffset(li);
-    const signature = JSON.stringify([y, segments]);
-    const member = segments.find((s) => s.member);
-    if (member) li.setAttribute("data-ges-stack", String(member.stackId));
-    else li.removeAttribute("data-ges-stack");
+  function renderRail(node, item) {
+    let rail = node.querySelector(":scope > .ges-rail");
+    const y = dotOffset(item, node);
+    const signature = JSON.stringify([y, item.kind, item.colorIndex, item.railUp, item.railDown, item.folded]);
     if (rail && rail.dataset.signature === signature) return;
-
     if (!rail) {
-      rail = document.createElement("div");
-      rail.className = "ges-rail";
+      rail = el("div", "ges-rail");
       rail.setAttribute("aria-hidden", "true");
-      li.appendChild(rail);
+      node.appendChild(rail);
     }
     rail.dataset.signature = signature;
     rail.replaceChildren();
 
-    for (const segment of segments) {
-      const left = 10 + segment.lane * LANE_WIDTH;
-      const color = `ges-c${segment.colorIndex}`;
-      const addLine = (top, bottom) => {
-        const line = document.createElement("span");
-        line.className = `ges-line ${color}${segment.member ? "" : " ges-pass"}`;
-        line.dataset.stack = String(segment.stackId);
-        line.style.left = `${left}px`;
-        line.style.top = top;
-        line.style.bottom = bottom;
-        rail.appendChild(line);
-      };
-      if (!segment.member) {
-        addLine("-1px", "0");
-        continue;
-      }
-      if (segment.continuesUp) addLine("-1px", `calc(100% - ${y}px)`);
-      if (segment.continuesDown) addLine(`${y}px`, "0");
+    const color = `ges-c${item.colorIndex}`;
+    const addPart = (className, styles) => {
+      const part = el("span", `${className} ${color}`);
+      part.dataset.stack = String(item.stackId);
+      Object.assign(part.style, styles);
+      rail.appendChild(part);
+    };
+    if (item.railUp) addPart("ges-line", { top: "-1px", bottom: `calc(100% - ${y})` });
+    if (item.railDown) addPart("ges-line", { top: y, bottom: "-1px" });
+    addPart(`ges-dot ges-dot-${item.kind}${item.folded ? " ges-dot-folded" : ""}`, { top: y });
+  }
 
-      const dot = document.createElement("span");
-      dot.className = `ges-dot ${color}`;
-      dot.dataset.stack = String(segment.stackId);
-      dot.style.left = `${left}px`;
-      dot.style.top = `${y}px`;
-      const stack = stacks.get(segment.stackId);
-      if (stack?.number) dot.title = `Stack #${stack.number}`;
-      rail.appendChild(dot);
+  function syntheticNode(list, key, className) {
+    let node = list.querySelector(`:scope > li[data-ges-key="${CSS.escape(key)}"]`);
+    if (!node) {
+      node = el("li", `ges-synthetic ${className}`);
+      node.setAttribute("data-ges-synthetic", "");
+      node.setAttribute("data-ges-key", key);
+      list.appendChild(node);
     }
+    return node;
+  }
+
+  function renderBody(node, signature, build) {
+    let body = node.querySelector(":scope > .ges-body");
+    if (body && body.dataset.signature === signature) return;
+    if (!body) {
+      body = el("div", "ges-body");
+      node.prepend(body);
+    }
+    body.dataset.signature = signature;
+    body.replaceChildren(...build());
+  }
+
+  function renderHeader(node, stack, summary, item) {
+    const signature = JSON.stringify([stack.id, stack.size, stack.baseBranch, item.folded, summary.counts]);
+    renderBody(node, signature, () => {
+      const fold = el("button", "ges-fold");
+      fold.type = "button";
+      fold.setAttribute("aria-expanded", String(!item.folded));
+      fold.setAttribute("aria-label", item.folded ? "Unfold stack" : "Fold stack");
+      fold.appendChild(svgIcon(ICONS.chevron, "ges-chevron"));
+
+      const title = el("span", "ges-header-title");
+      title.append(svgIcon(ICONS.stack, "ges-stack-icon"), `Stack of ${stack.size}`);
+      if (stack.baseBranch) title.appendChild(el("span", "ges-muted", ` into ${stack.baseBranch}`));
+
+      const described = core.STATUSES.filter((s) => summary.counts[s] > 0);
+      const bar = el("span", "ges-progress");
+      bar.setAttribute("role", "img");
+      bar.setAttribute("aria-label", described.map((s) => `${summary.counts[s]} ${STATUS_LABELS[s]}`).join(", "));
+      const counts = el("span", "ges-counts");
+      for (const status of described) {
+        const segment = el("span", `ges-segment ges-s-${status}`);
+        segment.style.flexGrow = String(summary.counts[status]);
+        segment.title = `${summary.counts[status]} ${STATUS_LABELS[status]}`;
+        bar.appendChild(segment);
+        const count = el("span", "ges-count");
+        count.append(el("span", `ges-count-dot ges-s-${status}`), `${summary.counts[status]} ${STATUS_LABELS[status]}`);
+        counts.appendChild(count);
+      }
+
+      return [fold, title, bar, counts];
+    });
+  }
+
+  function renderGhost(node, pull) {
+    const signature = JSON.stringify([pull.number, pull.title, pull.state, pull.url]);
+    renderBody(node, signature, () => {
+      const icon = svgIcon(ICONS.pull, `ges-ghost-icon ${pull.state === "DRAFT" ? "ges-draft" : "ges-open"}`);
+      const link = el("a", "ges-link", pull.title);
+      if (pull.url) link.href = pull.url;
+      const meta = el("span", "ges-muted", `#${pull.number} · ${pull.state === "DRAFT" ? "draft · " : ""}not on this page`);
+      return [icon, link, meta];
+    });
+  }
+
+  function setOrder(node, order) {
+    if (node.style.order !== String(order)) node.style.order = String(order);
+  }
+
+  function setFlag(node, name, on, value = "") {
+    if (on && node.getAttribute(name) !== value) node.setAttribute(name, value);
+    else if (!on && node.hasAttribute(name)) node.removeAttribute(name);
+  }
+
+  function clearList(list) {
+    list.querySelectorAll(":scope > li[data-ges-synthetic]").forEach((node) => node.remove());
+    list.querySelectorAll(":scope > li").forEach((li) => {
+      li.querySelector(":scope > .ges-rail")?.remove();
+      ["data-ges-stack", "data-ges-hl", "data-ges-hidden"].forEach((name) => li.removeAttribute(name));
+      li.style.removeProperty("order");
+    });
+    list.removeAttribute("data-ges-active");
+    list.style.removeProperty("--ges-base-pad");
   }
 
   function updateList(list) {
-    const rows = [...list.children].filter((el) => el.tagName === "LI").map(readRow);
+    const rows = [...list.children]
+      .filter((node) => node.tagName === "LI" && !node.hasAttribute("data-ges-synthetic"))
+      .map(readRow);
 
-    const stacksById = new Map();
-    const stackIds = rows.map(({ pull, badge }) => {
-      if (!pull || !badge) return null;
-      const stack = cachedStack(pull);
+    const stacks = new Map();
+    const rowRefs = rows.map((row) => {
+      if (!row.pull || !row.badge) return { number: row.pull?.number, stackId: null };
+      const stack = cachedStack(row.pull);
       if (!stack) {
-        if (needsFetch(pull)) pending.set(keyOf(pull), { pull, size: badge.size });
-        return null;
+        if (needsFetch(row.pull)) pending.set(keyOf(row.pull), { pull: row.pull, size: row.badge.size });
+        return { number: row.pull.number, stackId: null };
       }
-      stacksById.set(stack.id, stack);
-      return stack.id;
+      stacks.set(stack.id, stack);
+      return { number: row.pull.number, stackId: stack.id };
     });
     pumpFetches();
 
-    const layout = core.layoutLanes(stackIds);
-    if (layout.laneCount === 0) {
-      if (list.hasAttribute("data-ges-lanes")) clearList(list);
+    if (stacks.size === 0) {
+      if (list.hasAttribute("data-ges-active")) clearList(list);
       return;
     }
 
-    const gutter = `${8 + layout.laneCount * LANE_WIDTH}px`;
-    if (!list.hasAttribute("data-ges-lanes") && rows[0]) {
+    if (!list.hasAttribute("data-ges-active")) {
       list.style.setProperty("--ges-base-pad", getComputedStyle(rows[0].li).paddingLeft);
+      list.setAttribute("data-ges-active", "");
     }
-    if (list.getAttribute("data-ges-lanes") !== String(layout.laneCount)) {
-      list.setAttribute("data-ges-lanes", String(layout.laneCount));
-    }
-    if (list.style.getPropertyValue("--ges-gutter") !== gutter) list.style.setProperty("--ges-gutter", gutter);
 
-    rows.forEach(({ li }, index) => renderRail(li, layout.rows[index], stacksById));
+    const summaries = new Map();
+    for (const stack of stacks.values()) {
+      const rowsByNumber = new Map();
+      rows.forEach((row, i) => rowRefs[i].stackId === stack.id && rowsByNumber.set(row.pull.number, row));
+      summaries.set(stack.id, core.summarizeStack(stack, rowsByNumber));
+    }
+
+    const items = core.buildDisplay(rowRefs, stacks, isFolded);
+    const keep = new Set();
+    items.forEach((item, order) => {
+      let node;
+      if (item.kind === "row") {
+        node = rows[item.rowIndex].li;
+      } else if (item.kind === "header") {
+        node = syntheticNode(list, `header:${item.stackId}`, "ges-header");
+        renderHeader(node, stacks.get(item.stackId), summaries.get(item.stackId), item);
+      } else {
+        node = syntheticNode(list, `ghost:${item.stackId}:${item.pull.number}`, "ges-ghost");
+        renderGhost(node, item.pull);
+      }
+      keep.add(node);
+      setOrder(node, order);
+      setFlag(node, "data-ges-hidden", item.hidden);
+      setFlag(node, "data-ges-stack", item.stackId != null, String(item.stackId));
+      if (item.stackId == null) node.querySelector(":scope > .ges-rail")?.remove();
+      else if (!item.hidden) renderRail(node, item);
+    });
+    list.querySelectorAll(":scope > li[data-ges-synthetic]").forEach((node) => keep.has(node) || node.remove());
   }
+
+  // ---- Interaction --------------------------------------------------------------
 
   function setHighlight(list, stackId) {
     list.querySelectorAll(":scope > li[data-ges-hl]").forEach((li) => li.removeAttribute("data-ges-hl"));
-    list.querySelectorAll(".ges-active").forEach((el) => el.classList.remove("ges-active"));
+    list.querySelectorAll(".ges-active").forEach((node) => node.classList.remove("ges-active"));
     if (stackId == null) return;
-    list.querySelectorAll(`:scope > li[data-ges-stack="${CSS.escape(stackId)}"]`).forEach((li) => li.setAttribute("data-ges-hl", ""));
-    list.querySelectorAll(`.ges-rail [data-stack="${CSS.escape(stackId)}"]`).forEach((el) => el.classList.add("ges-active"));
+    const id = CSS.escape(stackId);
+    list.querySelectorAll(`:scope > li[data-ges-stack="${id}"]`).forEach((li) => li.setAttribute("data-ges-hl", ""));
+    list.querySelectorAll(`.ges-rail [data-stack="${id}"]`).forEach((node) => node.classList.add("ges-active"));
   }
 
   function onPointerOver(event) {
@@ -219,12 +393,23 @@
     setHighlight(list, null);
   }
 
+  function onClick(event) {
+    const header = event.target.closest?.(".ges-header");
+    if (!header || event.target.closest("a")) return;
+    event.preventDefault();
+    const stackId = Number(header.getAttribute("data-ges-stack"));
+    if (Number.isFinite(stackId)) toggleFold(stackId);
+  }
+
+  // ---- Wiring -------------------------------------------------------------------
+
   let scheduled = false;
   function scheduleUpdate() {
     if (scheduled) return;
     scheduled = true;
     requestAnimationFrame(() => {
       scheduled = false;
+      if (!settingsLoaded) return;
       document.querySelectorAll(LIST_SELECTOR).forEach((list) => {
         updateList(list);
         resizeObserver.observe(list);
@@ -232,7 +417,7 @@
     });
   }
 
-  const isOwnNode = (node) => node instanceof Element && (node.classList.contains("ges-rail") || node.closest(".ges-rail"));
+  const isOwnNode = (node) => node instanceof Element && Boolean(node.closest(".ges-rail, .ges-synthetic"));
 
   const mutationObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
@@ -254,5 +439,7 @@
   });
   document.addEventListener("pointerover", onPointerOver, true);
   document.addEventListener("pointerleave", onPointerLeave, true);
+  document.addEventListener("click", onClick);
+  loadSettings();
   scheduleUpdate();
 })();
