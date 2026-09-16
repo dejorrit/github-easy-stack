@@ -1,0 +1,62 @@
+ul[data-ges-lanes] > li {
+  position: relative;
+  padding-left: calc(var(--ges-base-pad, 0px) + var(--ges-gutter)) !important;
+}
+
+ul[data-ges-lanes] > li[data-ges-hl] {
+  background-color: var(--bgColor-accent-muted, rgba(56, 139, 253, 0.1));
+}
+
+.ges-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--ges-gutter);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.ges-line,
+.ges-dot {
+  position: absolute;
+  background-color: var(--ges-color);
+  transition: width 120ms ease, margin 120ms ease, opacity 120ms ease;
+}
+
+.ges-line {
+  width: 2px;
+  margin-left: -1px;
+}
+
+.ges-line.ges-pass {
+  opacity: 0.35;
+}
+
+.ges-dot {
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bgColor-default, #0d1117);
+  pointer-events: auto;
+}
+
+.ges-line.ges-active {
+  width: 4px;
+  margin-left: -2px;
+  opacity: 1;
+}
+
+.ges-dot.ges-active {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+}
+
+.ges-c0 { --ges-color: var(--fgColor-accent, #4493f8); }
+.ges-c1 { --ges-color: var(--fgColor-done, #ab7df8); }
+.ges-c2 { --ges-color: var(--fgColor-success, #3fb950); }
+.ges-c3 { --ges-color: var(--fgColor-severe, #db6d28); }
+.ges-c4 { --ges-color: var(--fgColor-sponsors, #db61a2); }
+.ges-c5 { --ges-color: var(--fgColor-attention, #d29922); }

@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "GitHub Easy Stack",
+  "version": "0.1.0",
+  "description": "Draws a line connecting stacked pull requests in GitHub pull request lists.",
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*"],
+      "js": ["src/core.js", "src/content.js"],
+      "css": ["src/content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
