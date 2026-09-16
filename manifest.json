@@ -4,8 +4,18 @@
   "version": "0.2.0",
   "description": "Groups stacked pull requests in GitHub pull request lists, with fold and progress per stack.",
   "permissions": ["storage"],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "action": {
     "default_title": "GitHub Easy Stack",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    },
     "default_popup": "popup/popup.html"
   },
   "content_scripts": [

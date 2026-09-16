@@ -27,3 +27,14 @@ A PR counts as *ready* when it has no requested changes, no failing checks and i
 ```sh
 node --test test/
 ```
+
+## Icons and store assets
+
+`icons/` and the Chrome Web Store images in `store/` are rendered from `store/assets.html`. After editing it, regenerate the PNGs with installed Chrome:
+
+```sh
+npm install --no-save playwright-core
+node store/render.mjs
+```
+
+Listing copy is in `store/listing.md`. When zipping the extension for upload, leave out `store/` and `test/`.
