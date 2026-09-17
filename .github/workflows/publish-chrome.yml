@@ -1,0 +1,74 @@
+name: Publish to Chrome Web Store
+
+on:
+  push:
+    branches: [main]
+    # Only files that end up in the extension zip. The bump commit below is pushed with
+    # GITHUB_TOKEN, which never triggers another run.
+    paths:
+      - manifest.json
+      - src/**
+      - popup/**
+      - icons/**
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version part to bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+# Queue runs instead of racing on the version number.
+concurrency:
+  group: publish-chrome
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      # Check out main rather than the triggering commit, so a queued run sees the previous bump.
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Test
+        run: node --test
+
+      - name: Bump version
+        id: version
+        run: echo "version=$(node scripts/bump-version.mjs ${{ inputs.bump || 'patch' }})" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: |
+          mkdir -p dist
+          zip -r -X "dist/github-easy-stack-${{ steps.version.outputs.version }}.zip" manifest.json src popup icons
+
+      # Push before publishing: a failed upload then only skips a version number, instead of
+      # the store holding a version the repo never had.
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release v${{ steps.version.outputs.version }} [skip ci]"
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin HEAD:main "v${{ steps.version.outputs.version }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: github-easy-stack-${{ steps.version.outputs.version }}
+          path: dist/*.zip
+
+      - name: Publish
+        env:
+          CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+        run: node scripts/publish-chrome.mjs "dist/github-easy-stack-${{ steps.version.outputs.version }}.zip"
