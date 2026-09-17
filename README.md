@@ -38,7 +38,7 @@ A temporary add-on is removed when Firefox restarts, so repeat step 2 after a re
 ## Tests
 
 ```sh
-node --test test/
+node --test
 ```
 
 ## Icons and store assets
@@ -50,4 +50,20 @@ npm install --no-save playwright-core
 node store/render.mjs
 ```
 
-Listing copy is in `store/listing.md`. When zipping the extension for upload, leave out `store/` and `test/`.
+Listing copy is in `store/listing.md`.
+
+## Releasing
+
+Every push to `main` that touches `manifest.json`, `src/`, `popup/` or `icons/` runs `.github/workflows/publish-chrome.yml`. It runs the tests, bumps the patch version in `manifest.json`, zips the extension, commits and tags the bump (`vX.Y.Z`) on `main`, then uploads the zip to the Chrome Web Store and submits it for review. For a minor or major bump, run the workflow by hand from the Actions tab and pick the part to bump.
+
+One-time setup:
+
+1. Publish the first version by hand in the [developer dashboard](https://chrome.google.com/webstore/devconsole); the API can only update an existing item.
+2. In Google Cloud, enable the **Chrome Web Store API**, create a service account and download a JSON key for it.
+3. In the developer dashboard, under **Account**, add the service account's email.
+4. Add these repository secrets:
+   - `CWS_SERVICE_ACCOUNT_JSON`: the contents of the JSON key
+   - `CWS_PUBLISHER_ID`: your publisher ID, shown in the developer dashboard
+   - `CWS_EXTENSION_ID`: the extension's item ID
+
+The workflow pushes the version bump to `main` with `GITHUB_TOKEN`, so `main` must allow pushes from GitHub Actions.
