@@ -28,7 +28,7 @@ A temporary add-on is removed when Firefox restarts, so repeat step 2 after a re
 ## How it works
 
 - Rows are found by GitHub's stack badge (`aria-label="Pull request stack, position X of Y"`). The badge doesn't say *which* stack a PR is in, and position/size alone can't tell apart two stacks of the same size.
-- For each stack, the extension makes one same-origin request with your GitHub session. It first tries `/{owner}/{repo}/pull/{n}/page_data/stack` (the endpoint GitHub's badge popup uses), then falls back to the stack JSON embedded in the PR page. The response lists every PR in the stack with its title and state.
+- For each stack, the extension makes one same-origin request with your GitHub session. It first tries `/{owner}/{repo}/pull/{n}/page_data/stacks` (the endpoint GitHub's badge popup uses), then falls back to the stack JSON embedded in the PR page. The response lists every PR in the stack with its title and state.
 - Rows are regrouped with CSS `order` on the existing list items instead of moving GitHub's DOM nodes, so GitHub's React code keeps working. Keyboard navigation still follows GitHub's original order.
 - Fold state per stack is kept in `storage.local`; the default lives in `storage.sync`. The APIs are reached
   through `browser` when it exists and `chrome` otherwise, because Firefox's `chrome` alias is the

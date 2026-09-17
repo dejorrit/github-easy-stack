@@ -106,7 +106,7 @@
     const base = `/${pull.owner}/${pull.repo}/pull/${pull.number}`;
     // Same endpoint GitHub's own stack badge dialog uses (requires a signed-in session).
     try {
-      const response = await fetch(`${base}/page_data/stack`, {
+      const response = await fetch(`${base}/page_data/stacks`, {
         credentials: "same-origin",
         headers: {
           Accept: "application/json",
