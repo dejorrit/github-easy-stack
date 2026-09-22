@@ -84,7 +84,8 @@ ul[data-ges-active] > li[data-ges-hl]:not(.ges-header) {
 
 ul[data-ges-active] > li.ges-synthetic {
   list-style: none;
-  padding: 6px 16px 6px calc(max(var(--ges-base-pad, 0px), 16px) + var(--ges-gutter)) !important;
+  padding: 6px max(var(--ges-base-pad-right, 16px), 16px) 6px
+    calc(max(var(--ges-base-pad, 0px), 16px) + var(--ges-gutter)) !important;
   border-top: 1px solid var(--borderColor-muted, #30363db3);
   font-size: 12px;
   line-height: 20px;
@@ -203,6 +204,7 @@ ul[data-ges-active] > li.ges-synthetic > .ges-body {
 
 .ges-donut {
   display: inline-flex;
+  margin-left: auto;
   padding: 2px;
   border: 0;
   border-radius: 50%;

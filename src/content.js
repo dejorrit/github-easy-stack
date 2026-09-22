@@ -16,6 +16,17 @@
   const DONUT_RADIUS = 8.5;
   const DONUT_STROKE = 5;
   const HAS_POPOVER = typeof HTMLElement !== "undefined" && "popover" in HTMLElement.prototype;
+  // Drawn as presentation attributes so the ring survives even if the stylesheet does not load;
+  // content.css overrides the stroke with GitHub's own theme variable when it does.
+  const STATUS_COLORS = {
+    merged: "#8957e5",
+    ready: "#238636",
+    waiting: "#9e6a03",
+    blocked: "#da3633",
+    draft: "#656c76",
+    unknown: "#3d444d",
+    closed: "#656c76",
+  };
   const RETRY_FAILED_AFTER_MS = 60_000;
 
   const STATUS_LABELS = {
@@ -282,6 +293,8 @@
       arc.setAttribute("cx", String(center));
       arc.setAttribute("cy", String(center));
       arc.setAttribute("r", String(DONUT_RADIUS));
+      arc.setAttribute("fill", "none");
+      arc.setAttribute("stroke", STATUS_COLORS[segment.status]);
       arc.setAttribute("stroke-width", String(DONUT_STROKE));
       const length = (segment.angle / 360) * circumference;
       arc.setAttribute("stroke-dasharray", `${length} ${circumference - length}`);
@@ -296,6 +309,10 @@
   // is Chrome-only for now, so place it under the donut by hand.
   function positionLegend(legend, anchor) {
     const rect = anchor.getBoundingClientRect();
+    // Inline, because the UA sheet centres a popover with `inset: 0; margin: auto`.
+    legend.style.position = "fixed";
+    legend.style.inset = "auto";
+    legend.style.margin = "0";
     const width = legend.offsetWidth || 180;
     const height = legend.offsetHeight;
     let top = rect.bottom + 6;
@@ -381,11 +398,14 @@
     const span = core.ageSpan(visible.map((row) => row.createdAt));
     const next = core.nextAction(stack, summary.statuses);
     const now = Date.now();
+    const oldest = span && core.formatDuration(now - span.oldest);
+    const newest = span && core.formatDuration(now - span.newest);
     return {
       author: core.authorSummary(visible.map((row) => row.author)),
       age: span && {
-        oldest: core.formatDuration(now - span.oldest),
-        newest: span.newest === span.oldest ? null : core.formatDuration(now - span.newest),
+        oldest,
+        // Only worth a second item when it actually reads differently.
+        newest: newest === oldest ? null : newest,
         oldestTitle: `oldest on this page: ${new Date(span.oldest).toLocaleString()}`,
         newestTitle: `newest on this page: ${new Date(span.newest).toLocaleString()}`,
       },
@@ -422,6 +442,7 @@
     });
     list.removeAttribute("data-ges-active");
     list.style.removeProperty("--ges-base-pad");
+    list.style.removeProperty("--ges-base-pad-right");
   }
 
   function updateList(list) {
@@ -454,7 +475,10 @@
     }
 
     if (!list.hasAttribute("data-ges-active")) {
-      list.style.setProperty("--ges-base-pad", getComputedStyle(rows[0].li).paddingLeft);
+      const rowPadding = getComputedStyle(rows[0].li);
+      list.style.setProperty("--ges-base-pad", rowPadding.paddingLeft);
+      // So the donut lines up with whatever GitHub keeps at the right of its own rows.
+      list.style.setProperty("--ges-base-pad-right", rowPadding.paddingRight);
       list.setAttribute("data-ges-active", "");
     }
 
