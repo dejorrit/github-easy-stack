@@ -109,8 +109,41 @@ ul[data-ges-active] > li.ges-header {
 }
 
 .ges-header .ges-body {
+  gap: 12px;
+}
+
+/* GitHub's list item is a block today, but claim the full row either way. */
+ul[data-ges-active] > li.ges-synthetic > .ges-body {
+  flex: 1;
+}
+
+.ges-header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* One line tall with overflow hidden: an item that no longer fits wraps out of sight, which
+   drops the line right to left and takes its separator with it. */
+.ges-meta {
+  display: flex;
   flex-wrap: wrap;
-  gap: 8px 20px;
+  height: 18px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--fgColor-muted, #9198a1);
+}
+
+.ges-meta-item {
+  white-space: nowrap;
+}
+
+.ges-meta-item + .ges-meta-item::before {
+  content: "\00b7";
+  margin: 0 8px;
 }
 
 .ges-header {
@@ -168,24 +201,46 @@ ul[data-ges-active] > li.ges-header {
   color: var(--fgColor-muted, #9198a1);
 }
 
-.ges-progress {
+.ges-donut {
   display: inline-flex;
-  gap: 2px;
-  width: 160px;
-  height: 8px;
-  border-radius: 4px;
-  overflow: hidden;
+  padding: 2px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  align-self: center;
 }
 
-.ges-segment {
-  flex-basis: 0;
-  min-width: 4px;
+.ges-donut:focus-visible {
+  outline: 2px solid var(--focus-outlineColor, #1f6feb);
 }
 
-.ges-counts {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
+.ges-arc {
+  fill: none;
+  stroke: var(--ges-status);
+}
+
+/* Closed popovers are display:none by UA rule, which an author `display` would override. */
+.ges-legend {
+  display: none;
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--borderColor-default, #3d444d);
+  border-radius: 6px;
+  background-color: var(--overlay-bgColor, var(--bgColor-default, #0d1117));
+  color: var(--fgColor-default, #f0f6fc);
+  box-shadow: var(--shadow-floating-small, 0 8px 24px rgba(1, 4, 9, 0.8));
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.ges-legend:popover-open {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .ges-count {
@@ -198,15 +253,16 @@ ul[data-ges-active] > li.ges-header {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  background-color: var(--ges-status);
 }
 
-.ges-s-merged { background-color: var(--bgColor-done-emphasis, #8957e5); }
-.ges-s-ready { background-color: var(--bgColor-success-emphasis, #238636); }
-.ges-s-waiting { background-color: var(--bgColor-attention-emphasis, #9e6a03); }
-.ges-s-blocked { background-color: var(--bgColor-danger-emphasis, #da3633); }
-.ges-s-draft { background-color: var(--bgColor-neutral-emphasis, #656c76); }
-.ges-s-unknown { background-color: var(--borderColor-default, #3d444d); }
-.ges-s-closed { background-color: var(--bgColor-neutral-muted, #656c7633); }
+.ges-s-merged { --ges-status: var(--bgColor-done-emphasis, #8957e5); }
+.ges-s-ready { --ges-status: var(--bgColor-success-emphasis, #238636); }
+.ges-s-waiting { --ges-status: var(--bgColor-attention-emphasis, #9e6a03); }
+.ges-s-blocked { --ges-status: var(--bgColor-danger-emphasis, #da3633); }
+.ges-s-draft { --ges-status: var(--bgColor-neutral-emphasis, #656c76); }
+.ges-s-unknown { --ges-status: var(--borderColor-default, #3d444d); }
+.ges-s-closed { --ges-status: var(--bgColor-neutral-muted, #656c7633); }
 
 .ges-link {
   color: var(--fgColor-default, #f0f6fc);
@@ -235,3 +291,38 @@ ul[data-ges-active] > li.ges-header {
 
 .ges-open { color: var(--fgColor-open, #3fb950); }
 .ges-draft { color: var(--fgColor-draft, #9198a1); }
+
+/* ---- Motion ---- */
+
+/* Which rows form a stack is unknown until the fetch lands, so the rows that are about to
+   move pulse in place; the header fades in once it can be put somewhere true. */
+li[data-ges-loading] {
+  animation: ges-pulse 1.4s ease-in-out infinite;
+}
+
+ul[data-ges-active] > li.ges-header {
+  animation: ges-enter 160ms ease-out both;
+}
+
+@keyframes ges-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@keyframes ges-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  li[data-ges-loading],
+  ul[data-ges-active] > li.ges-header {
+    animation: none;
+  }
+
+  .ges-chevron,
+  .ges-line,
+  .ges-dot {
+    transition: none;
+  }
+}

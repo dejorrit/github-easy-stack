@@ -3,11 +3,12 @@
 Browser extension for Chrome and Firefox that groups [stacked pull requests](https://docs.github.com/en/pull-requests/how-tos/stacked-pull-requests) in GitHub's pull request lists.
 
 - **Always grouped**: stack members are shown together under a stack header, even if other PRs sat between them. Open members that aren't on the current page (pagination, filters) show up as compact placeholder rows.
-- **Progress**: the header shows a progress bar and counts: merged, ready, in progress, blocked, draft, not on this page.
+- **Progress**: a donut on the right of the header splits the stack into merged, ready, in progress, blocked, draft, closed and not on this page. Click it for the legend with the counts. Slices thinner than 12 degrees are drawn at 12, so one blocked PR in a stack of twenty stays visible.
+- **At a glance**: under *Stack of X into Y* the header shows what to do next (the lowest member that has not merged), who the stack belongs to, and how old it is - oldest and newest member. The line is one row tall, so on a narrow window it drops items from the right, keeping the next action.
 - **Fold**: click a stack header to fold or unfold it. The toolbar popup has a *Fold stacks by default* setting.
 - **Rail**: a colored line connects the members; hover a row to highlight its whole stack.
 
-A PR counts as *ready* when it has no requested changes, no failing checks and isn't a draft. Review and check status is read from the list rows, so members not on the page are counted as *not on this page*.
+A PR counts as *ready* when it has no requested changes, no failing checks and isn't a draft. Review status, checks, author and opened time are read from the list rows, so members not on the page are counted as *not on this page* and contribute no author or age. The stack payload carries no author or timestamps, so the header describes the members GitHub put on the page.
 
 ## Install
 
@@ -17,7 +18,7 @@ A PR counts as *ready* when it has no requested changes, no failing checks and i
 2. Click **Load unpacked** and select this folder.
 3. Reload a GitHub pull request list.
 
-**Firefox** (109 or later)
+**Firefox** (125 or later, for `popover`)
 
 1. Open `about:debugging#/runtime/this-firefox`.
 2. Click **Load Temporary Add-on** and select this folder's `manifest.json`.

@@ -2,6 +2,10 @@
 (function (root) {
   const PALETTE_SIZE = 6;
   const STATUSES = ["merged", "ready", "waiting", "blocked", "draft", "unknown", "closed"];
+  // Clockwise from 12 o'clock in the donut: what needs attention first, what is done last.
+  const RING_ORDER = ["blocked", "waiting", "ready", "draft", "unknown", "merged", "closed"];
+  // A 22px donut draws ~0.15px of arc per degree, so anything under ~12deg is a hairline.
+  const MIN_SLICE_DEGREES = 12;
 
   function parseStackLabel(label) {
     const match = /position\s+(\d+)\s+of\s+(\d+)/i.exec(label || "");
@@ -72,11 +76,13 @@
         title: typeof p.title === "string" ? p.title : `#${p.number}`,
         state: typeof p.state === "string" ? p.state.toUpperCase() : "OPEN",
         url: typeof p.url === "string" ? p.url : null,
+        headBranch: typeof p.headBranch === "string" ? p.headBranch : null,
       }));
     return {
       id: raw.id,
       number: Number.isFinite(raw.number) ? raw.number : null,
       size: Number.isFinite(raw.size) ? raw.size : pulls.length,
+      position: Number.isFinite(raw.position) ? raw.position : null,
       baseBranch: typeof raw.baseBranch === "string" ? raw.baseBranch : null,
       pulls,
       pullNumbers: pulls.map((p) => p.number),
@@ -156,9 +162,96 @@
     return items;
   }
 
+  // ---- Header meta ------------------------------------------------------------
+
+  // "#7130 · renovate[bot] opened 11 minutes ago", or the older "#479 opened 3 days ago by mira".
+  const LOGIN = "[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\[bot\\])?";
+  function parseRowAuthor(text) {
+    const line = (text || "").replace(/\s+/g, " ");
+    const verbs = "opened|merged|closed|reopened|created";
+    // The lookahead stops `\\d+` from backtracking and reading "9" out of "#479 opened ...".
+    const before = new RegExp(`#\\d+(?!\\d)\\s*·?\\s*(${LOGIN})\\s+(?:${verbs})\\b`, "i").exec(line);
+    if (before) return before[1];
+    const after = new RegExp(`\\b(?:${verbs})\\b[^·]*?\\bby\\s+(${LOGIN})`, "i").exec(line);
+    return after ? after[1] : null;
+  }
+
+  // logins of the members on the page, top of the stack first.
+  function authorSummary(logins) {
+    const present = (logins || []).filter(Boolean);
+    if (!present.length) return null;
+    const counts = new Map();
+    for (const login of present) counts.set(login, (counts.get(login) || 0) + 1);
+    // Most layers wins; a tie goes to the bottom-most author, whose stack it is.
+    let login = present[present.length - 1];
+    for (const [candidate, count] of counts) if (count > counts.get(login)) login = candidate;
+    return { login, others: counts.size - 1 };
+  }
+
+  // Only members on the page carry a timestamp, so this is the span of what is visible.
+  function ageSpan(times) {
+    const stamps = (times || []).filter((t) => Number.isFinite(t));
+    if (!stamps.length) return null;
+    return { oldest: Math.min(...stamps), newest: Math.max(...stamps) };
+  }
+
+  function formatDuration(ms) {
+    const minutes = Math.floor(ms / 60_000);
+    if (minutes < 60) return `${Math.max(minutes, 1)}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h`;
+    const days = Math.floor(hours / 24);
+    if (days < 60) return `${days}d`;
+    const months = Math.floor(days / 30);
+    if (months < 24) return `${months}mo`;
+    return `${Math.floor(days / 365)}y`;
+  }
+
+  // Stacks merge bottom-up, so the only member you can act on is the lowest one still open.
+  function nextAction(stack, statuses) {
+    const pulls = stack.pulls || [];
+    for (let i = pulls.length - 1; i >= 0; i--) {
+      const pull = pulls[i];
+      if (pull.state === "MERGED" || pull.state === "CLOSED") continue;
+      return { pull, status: statuses?.get(pull.number) || "unknown" };
+    }
+    return null;
+  }
+
+  // Angles for the donut, clockwise from 12 o'clock. Slices thinner than `minDegrees` are pinned
+  // to it and the rest share what is left, so a single blocked PR stays visible in a 20 PR stack.
+  function donutSegments(counts, minDegrees = MIN_SLICE_DEGREES) {
+    const present = RING_ORDER.filter((status) => counts[status] > 0);
+    if (!present.length) return [];
+    const min = Math.min(minDegrees, 360 / present.length);
+    const pinned = new Set();
+    let angles = new Map();
+    for (;;) {
+      const free = 360 - min * pinned.size;
+      const freeTotal = present.reduce((sum, s) => (pinned.has(s) ? sum : sum + counts[s]), 0);
+      if (!freeTotal) {
+        angles = new Map(present.map((s) => [s, 360 / present.length]));
+        break;
+      }
+      angles = new Map(present.map((s) => [s, pinned.has(s) ? min : (free * counts[s]) / freeTotal]));
+      const tooThin = present.find((s) => !pinned.has(s) && angles.get(s) < min);
+      if (!tooThin) break;
+      pinned.add(tooThin);
+    }
+    let start = 0;
+    return present.map((status) => {
+      const angle = angles.get(status);
+      const segment = { status, start, angle };
+      start += angle;
+      return segment;
+    });
+  }
+
   const api = {
     PALETTE_SIZE,
     STATUSES,
+    RING_ORDER,
+    MIN_SLICE_DEGREES,
     parseStackLabel,
     parsePullHref,
     parseReviewLabel,
@@ -168,6 +261,12 @@
     pullStatus,
     summarizeStack,
     buildDisplay,
+    parseRowAuthor,
+    authorSummary,
+    ageSpan,
+    formatDuration,
+    nextAction,
+    donutSegments,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.GitHubEasyStack = api;
