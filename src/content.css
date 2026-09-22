@@ -110,7 +110,7 @@ ul[data-ges-active] > li.ges-header {
 }
 
 .ges-header .ges-body {
-  gap: 12px;
+  gap: 16px;
 }
 
 /* GitHub's list item is a block today, but claim the full row either way. */
@@ -121,7 +121,7 @@ ul[data-ges-active] > li.ges-synthetic > .ges-body {
 .ges-header-main {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   flex: 1;
   min-width: 0;
 }
@@ -144,7 +144,7 @@ ul[data-ges-active] > li.ges-synthetic > .ges-body {
 
 .ges-meta-item + .ges-meta-item::before {
   content: "\00b7";
-  margin: 0 8px;
+  margin: 0 10px;
 }
 
 .ges-header {
@@ -204,58 +204,15 @@ ul[data-ges-active] > li.ges-synthetic > .ges-body {
 
 .ges-donut {
   display: inline-flex;
-  margin-left: auto;
-  padding: 2px;
-  border: 0;
-  border-radius: 50%;
-  background: none;
-  color: inherit;
-  cursor: pointer;
   align-self: center;
-}
-
-.ges-donut:focus-visible {
-  outline: 2px solid var(--focus-outlineColor, #1f6feb);
+  /* Claims whatever is left of the row, so it sits against the right edge. */
+  margin-left: auto;
+  padding-left: 8px;
 }
 
 .ges-arc {
   fill: none;
   stroke: var(--ges-status);
-}
-
-/* Closed popovers are display:none by UA rule, which an author `display` would override. */
-.ges-legend {
-  display: none;
-  position: fixed;
-  inset: auto;
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--borderColor-default, #3d444d);
-  border-radius: 6px;
-  background-color: var(--overlay-bgColor, var(--bgColor-default, #0d1117));
-  color: var(--fgColor-default, #f0f6fc);
-  box-shadow: var(--shadow-floating-small, 0 8px 24px rgba(1, 4, 9, 0.8));
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.ges-legend:popover-open {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.ges-count {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.ges-count-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--ges-status);
 }
 
 .ges-s-merged { --ges-status: var(--bgColor-done-emphasis, #8957e5); }

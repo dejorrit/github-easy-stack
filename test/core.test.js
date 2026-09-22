@@ -170,3 +170,9 @@ test("donutSegments keeps a thin slice visible without leaving a gap in the ring
   assert.ok(many.every((s) => s.angle >= core.MIN_SLICE_DEGREES - 1e-9));
   assert.deepEqual(many.map((s) => s.status), core.RING_ORDER);
 });
+
+test("authorHref points at a profile, or at /apps for a bot", () => {
+  assert.equal(core.authorHref("xiduzo"), "/xiduzo");
+  assert.equal(core.authorHref("renovate[bot]"), "/apps/renovate");
+  assert.equal(core.authorHref(null), null);
+});

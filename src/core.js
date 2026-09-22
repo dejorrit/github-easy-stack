@@ -176,6 +176,12 @@
     return after ? after[1] : null;
   }
 
+  // GitHub keeps app accounts under /apps, and the row spells them "renovate[bot]".
+  function authorHref(login) {
+    if (!login) return null;
+    return login.endsWith("[bot]") ? `/apps/${login.slice(0, -"[bot]".length)}` : `/${login}`;
+  }
+
   // logins of the members on the page, top of the stack first.
   function authorSummary(logins) {
     const present = (logins || []).filter(Boolean);
@@ -262,6 +268,7 @@
     summarizeStack,
     buildDisplay,
     parseRowAuthor,
+    authorHref,
     authorSummary,
     ageSpan,
     formatDuration,

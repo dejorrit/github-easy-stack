@@ -15,7 +15,6 @@
   const DONUT_SIZE = 22;
   const DONUT_RADIUS = 8.5;
   const DONUT_STROKE = 5;
-  const HAS_POPOVER = typeof HTMLElement !== "undefined" && "popover" in HTMLElement.prototype;
   // Drawn as presentation attributes so the ring survives even if the stylesheet does not load;
   // content.css overrides the stroke with GitHub's own theme variable when it does.
   const STATUS_COLORS = {
@@ -305,22 +304,6 @@
     return svg;
   }
 
-  // A popover with no positioning lands in the middle of the viewport, and CSS anchor positioning
-  // is Chrome-only for now, so place it under the donut by hand.
-  function positionLegend(legend, anchor) {
-    const rect = anchor.getBoundingClientRect();
-    // Inline, because the UA sheet centres a popover with `inset: 0; margin: auto`.
-    legend.style.position = "fixed";
-    legend.style.inset = "auto";
-    legend.style.margin = "0";
-    const width = legend.offsetWidth || 180;
-    const height = legend.offsetHeight;
-    let top = rect.bottom + 6;
-    if (height && top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 6);
-    legend.style.left = `${Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))}px`;
-    legend.style.top = `${top}px`;
-  }
-
   function metaItem(text, title) {
     const item = el("span", "ges-meta-item", text);
     if (title) item.title = title;
@@ -341,7 +324,12 @@
       line.appendChild(metaItem("all merged"));
     }
     if (meta.author) {
-      line.appendChild(metaItem(meta.author.others ? `${meta.author.login} +${meta.author.others}` : meta.author.login));
+      const item = el("span", "ges-meta-item");
+      const link = el("a", "ges-link", meta.author.login);
+      link.href = core.authorHref(meta.author.login);
+      item.append(link);
+      if (meta.author.others) item.append(` +${meta.author.others}`);
+      line.appendChild(item);
     }
     if (meta.age) {
       line.appendChild(metaItem(`${meta.age.oldest} old`, meta.age.oldestTitle));
@@ -367,28 +355,16 @@
       main.append(title, metaLine(meta));
 
       const described = core.STATUSES.filter((s) => summary.counts[s] > 0);
-      const legendText = described.map((s) => `${summary.counts[s]} ${STATUS_LABELS[s]}`).join(", ");
-      const donut = el("button", "ges-donut");
-      donut.type = "button";
-      // The counts used to be spelled out in the header; keep them in the accessibility tree.
-      donut.setAttribute("aria-label", `Stack progress: ${legendText}`);
+      const counts = described.map((s) => `${summary.counts[s]} ${STATUS_LABELS[s]}`);
+      const donut = el("span", "ges-donut");
+      // The counts used to be spelled out in the header; the tooltip is where they live now,
+      // one per line, and the label keeps them in the accessibility tree.
+      donut.setAttribute("role", "img");
+      donut.setAttribute("aria-label", `Stack progress: ${counts.join(", ")}`);
+      donut.title = counts.join("\n");
       donut.appendChild(renderDonut(summary.counts));
 
-      const legend = el("div", "ges-legend");
-      legend.id = `ges-legend-${stack.id}`;
-      for (const status of described) {
-        const count = el("span", "ges-count");
-        count.append(el("span", `ges-count-dot ges-s-${status}`), `${summary.counts[status]} ${STATUS_LABELS[status]}`);
-        legend.appendChild(count);
-      }
-      if (!HAS_POPOVER) return [fold, main, donut];
-      legend.setAttribute("popover", "");
-      donut.setAttribute("popovertarget", legend.id);
-      // beforetoggle places it before the first paint; toggle corrects it once it has a size.
-      const place = (event) => event.newState === "open" && positionLegend(legend, donut);
-      legend.addEventListener("beforetoggle", place);
-      legend.addEventListener("toggle", place);
-      return [fold, main, donut, legend];
+      return [fold, main, donut];
     });
   }
 
@@ -547,7 +523,7 @@
 
   function onClick(event) {
     const header = event.target.closest?.(".ges-header");
-    if (!header || event.target.closest("a, .ges-donut, .ges-legend")) return;
+    if (!header || event.target.closest("a")) return;
     event.preventDefault();
     const stackId = Number(header.getAttribute("data-ges-stack"));
     if (Number.isFinite(stackId)) toggleFold(stackId);
