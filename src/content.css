@@ -210,8 +210,12 @@ ul[data-ges-active] > li.ges-synthetic > .ges-body {
   padding-left: 12px;
 }
 
-/* The donut's legend: one row per status, in its own colour. Positioned in content.js. */
+/* The donut's legend: one row per status, in its own colour. Positioned in content.js, which
+   also switches the grid on, so the three columns line up across every row. */
 .ges-tooltip {
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: 4px 8px;
   padding: 8px 10px;
   border: 1px solid var(--borderColor-default, #3d444d);
   border-radius: 6px;
@@ -223,23 +227,12 @@ ul[data-ges-active] > li.ges-synthetic > .ges-body {
   white-space: nowrap;
 }
 
-.ges-legend-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ges-dot {
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.ges-legend-dot {
   background: var(--ges-status);
 }
 
 .ges-legend-count {
-  min-width: 2ch;
-  text-align: right;
+  justify-self: end;
   font-variant-numeric: tabular-nums;
 }
 
@@ -252,13 +245,13 @@ ul[data-ges-active] > li.ges-synthetic > .ges-body {
   stroke: var(--ges-status);
 }
 
-.ges-s-merged { --ges-status: var(--bgColor-done-emphasis, #8957e5); }
-.ges-s-ready { --ges-status: var(--bgColor-success-emphasis, #238636); }
-.ges-s-waiting { --ges-status: var(--bgColor-attention-emphasis, #9e6a03); }
-.ges-s-blocked { --ges-status: var(--bgColor-danger-emphasis, #da3633); }
-.ges-s-draft { --ges-status: var(--bgColor-neutral-emphasis, #656c76); }
-.ges-s-unknown { --ges-status: var(--borderColor-default, #3d444d); }
-.ges-s-closed { --ges-status: var(--bgColor-neutral-muted, #656c7633); }
+.ges-s-merged { --ges-status: var(--fgColor-done, #ab7df8); }
+.ges-s-ready { --ges-status: var(--fgColor-success, #3fb950); }
+.ges-s-waiting { --ges-status: var(--fgColor-attention, #d29922); }
+.ges-s-blocked { --ges-status: var(--fgColor-danger, #f85149); }
+.ges-s-draft { --ges-status: var(--fgColor-muted, #9198a1); }
+.ges-s-unknown { --ges-status: var(--fgColor-disabled, #656c76); }
+.ges-s-closed { --ges-status: var(--fgColor-disabled, #656c76); }
 
 .ges-link {
   color: var(--fgColor-default, #f0f6fc);

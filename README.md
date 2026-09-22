@@ -3,7 +3,7 @@
 Browser extension for Chrome and Firefox that groups [stacked pull requests](https://docs.github.com/en/pull-requests/how-tos/stacked-pull-requests) in GitHub's pull request lists.
 
 - **Always grouped**: stack members are shown together under a stack header, even if other PRs sat between them. Open members that aren't on the current page (pagination, filters) show up as compact placeholder rows.
-- **Progress**: a donut on the right of the header splits the stack into merged, ready, in progress, blocked, draft, closed and not on this page. Hover it for a legend: the colour, the count and the status, one per line. Slices thinner than 8 degrees are drawn at 8, so one blocked PR in a stack of twenty stays visible.
+- **Progress**: a donut on the right of the header splits the stack into merged, ready, in progress, blocked, draft, closed and not on this page. Hover it for a legend: the colour, the count and the status, one per line. Slices thinner than 10 degrees are drawn at 10, so one blocked PR in a stack of twenty stays visible.
 - **At a glance**: under *Stack of X into Y* the header shows what to do next (the lowest member that has not merged), who the stack belongs to, and how old it is - oldest and newest member. The line is one row tall, so on a narrow window it drops items from the right, keeping the next action.
 - **Fold**: click a stack header to fold or unfold it. The toolbar popup has a *Fold stacks by default* setting.
 - **Rail**: a colored line connects the members; hover a row to highlight its whole stack.

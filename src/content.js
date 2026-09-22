@@ -11,19 +11,19 @@
   const LEADING_ICON_SELECTOR = '[class*="LeadingContent-module__container"] svg';
   const MAX_CONCURRENT_FETCHES = 3;
   const SVG_NS = "http://www.w3.org/2000/svg";
-  // Outer 36px, 8px ring: the hole stays 20px so the shape still reads as a donut.
-  const DONUT_SIZE = 36;
-  const DONUT_RADIUS = 14;
-  const DONUT_STROKE = 8;
+  // Outer 28px, 5px ring: the hole stays 18px so the shape still reads as a donut.
+  const DONUT_SIZE = 28;
+  const DONUT_RADIUS = 11.5;
+  const DONUT_STROKE = 5;
   // Drawn as presentation attributes so the ring survives even if the stylesheet does not load;
   // content.css overrides the stroke with GitHub's own theme variable when it does.
   const STATUS_COLORS = {
-    merged: "#8957e5",
-    ready: "#238636",
-    waiting: "#9e6a03",
-    blocked: "#da3633",
-    draft: "#656c76",
-    unknown: "#3d444d",
+    merged: "#ab7df8",
+    ready: "#3fb950",
+    waiting: "#d29922",
+    blocked: "#f85149",
+    draft: "#9198a1",
+    unknown: "#656c76",
     closed: "#656c76",
   };
   const RETRY_FAILED_AFTER_MS = 60_000;
@@ -320,9 +320,10 @@
     return tooltip;
   }
 
+  // Three cells per status, dropped straight into the card's grid so dots, counts and labels
+  // line up down their own columns.
   function legendRow(status, count) {
-    const row = el("div", "ges-legend-row");
-    const dot = el("span", `ges-dot ges-s-${status}`);
+    const dot = el("span", `ges-legend-dot ges-s-${status}`);
     // The variable is the stylesheet's themed colour, the literal what is left without it, and
     // the size has to come along or there would be nothing for either to colour.
     Object.assign(dot.style, {
@@ -331,16 +332,15 @@
       borderRadius: "50%",
       background: `var(--ges-status, ${STATUS_COLORS[status]})`,
     });
-    row.append(dot, el("span", "ges-legend-count", String(count)), el("span", "ges-legend-label", STATUS_LABELS[status]));
-    return row;
+    return [dot, el("span", "ges-legend-count", String(count)), el("span", "ges-legend-label", STATUS_LABELS[status])];
   }
 
   function showTooltip(owner) {
     const counts = owner.gesCounts;
     if (!counts) return;
     const node = tooltipNode();
-    node.replaceChildren(...core.STATUSES.filter((s) => counts[s] > 0).map((s) => legendRow(s, counts[s])));
-    node.style.display = "block";
+    node.replaceChildren(...core.STATUSES.filter((s) => counts[s] > 0).flatMap((s) => legendRow(s, counts[s])));
+    node.style.display = "grid";
     // Under the donut and right-aligned with it, flipped above when the row sits low.
     const anchor = owner.getBoundingClientRect();
     const box = node.getBoundingClientRect();
