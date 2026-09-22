@@ -11,10 +11,10 @@
   const LEADING_ICON_SELECTOR = '[class*="LeadingContent-module__container"] svg';
   const MAX_CONCURRENT_FETCHES = 3;
   const SVG_NS = "http://www.w3.org/2000/svg";
-  // Outer 22px, 5px ring: the hole stays 12px so the shape still reads as a donut.
-  const DONUT_SIZE = 22;
-  const DONUT_RADIUS = 8.5;
-  const DONUT_STROKE = 5;
+  // Outer 36px, 8px ring: the hole stays 20px so the shape still reads as a donut.
+  const DONUT_SIZE = 36;
+  const DONUT_RADIUS = 14;
+  const DONUT_STROKE = 8;
   // Drawn as presentation attributes so the ring survives even if the stylesheet does not load;
   // content.css overrides the stroke with GitHub's own theme variable when it does.
   const STATUS_COLORS = {
@@ -304,6 +304,59 @@
     return svg;
   }
 
+  // A hover card rather than the title attribute: the counts only read as a legend when each
+  // one carries its own colour, and a native title is plain text. One node, reused, parked on
+  // <body> so nothing GitHub wraps the list in can clip it.
+  let tooltip = null;
+  let tooltipOwner = null;
+
+  function tooltipNode() {
+    if (tooltip?.isConnected) return tooltip;
+    tooltip = el("div", "ges-tooltip");
+    // Structure inline, looks in content.css: a stylesheet that fails to arrive must not leave
+    // a legend parked in the corner of the page.
+    Object.assign(tooltip.style, { position: "fixed", display: "none", zIndex: "2147483647", pointerEvents: "none" });
+    document.body.appendChild(tooltip);
+    return tooltip;
+  }
+
+  function legendRow(status, count) {
+    const row = el("div", "ges-legend-row");
+    const dot = el("span", `ges-dot ges-s-${status}`);
+    // The variable is the stylesheet's themed colour, the literal what is left without it, and
+    // the size has to come along or there would be nothing for either to colour.
+    Object.assign(dot.style, {
+      width: "8px",
+      height: "8px",
+      borderRadius: "50%",
+      background: `var(--ges-status, ${STATUS_COLORS[status]})`,
+    });
+    row.append(dot, el("span", "ges-legend-count", String(count)), el("span", "ges-legend-label", STATUS_LABELS[status]));
+    return row;
+  }
+
+  function showTooltip(owner) {
+    const counts = owner.gesCounts;
+    if (!counts) return;
+    const node = tooltipNode();
+    node.replaceChildren(...core.STATUSES.filter((s) => counts[s] > 0).map((s) => legendRow(s, counts[s])));
+    node.style.display = "block";
+    // Under the donut and right-aligned with it, flipped above when the row sits low.
+    const anchor = owner.getBoundingClientRect();
+    const box = node.getBoundingClientRect();
+    const below = anchor.bottom + 6;
+    const top = below + box.height > innerHeight - 8 ? Math.max(8, anchor.top - box.height - 6) : below;
+    node.style.top = `${top}px`;
+    node.style.left = `${Math.max(8, Math.min(anchor.right - box.width, innerWidth - box.width - 8))}px`;
+    tooltipOwner = owner;
+  }
+
+  function hideTooltip() {
+    if (!tooltipOwner) return;
+    tooltip.style.display = "none";
+    tooltipOwner = null;
+  }
+
   function metaItem(text, title) {
     const item = el("span", "ges-meta-item", text);
     if (title) item.title = title;
@@ -357,11 +410,11 @@
       const described = core.STATUSES.filter((s) => summary.counts[s] > 0);
       const counts = described.map((s) => `${summary.counts[s]} ${STATUS_LABELS[s]}`);
       const donut = el("span", "ges-donut");
-      // The counts used to be spelled out in the header; the tooltip is where they live now,
-      // one per line, and the label keeps them in the accessibility tree.
+      // The counts used to be spelled out in the header; the hover legend is where they live
+      // now, one per line, and the label keeps them in the accessibility tree.
       donut.setAttribute("role", "img");
       donut.setAttribute("aria-label", `Stack progress: ${counts.join(", ")}`);
-      donut.title = counts.join("\n");
+      donut.gesCounts = summary.counts;
       donut.appendChild(renderDonut(summary.counts));
 
       return [fold, main, donut];
@@ -422,6 +475,7 @@
   }
 
   function updateList(list) {
+    if (tooltipOwner && !tooltipOwner.isConnected) hideTooltip();
     const rows = [...list.children]
       .filter((node) => node.tagName === "LI" && !node.hasAttribute("data-ges-synthetic"))
       .map(readRow);
@@ -505,6 +559,8 @@
   }
 
   function onPointerOver(event) {
+    const donut = event.target.closest?.(".ges-donut");
+    if (donut !== tooltipOwner) donut ? showTooltip(donut) : hideTooltip();
     const list = event.target.closest?.(LIST_SELECTOR);
     if (!list) return;
     const li = event.target.closest(`${LIST_SELECTOR} > li`);
@@ -515,6 +571,7 @@
   }
 
   function onPointerLeave(event) {
+    hideTooltip();
     const list = event.target;
     if (!(list instanceof Element) || !list.matches(LIST_SELECTOR)) return;
     list.dataset.gesHover = "";
@@ -568,6 +625,8 @@
   document.addEventListener("pointerover", onPointerOver, true);
   document.addEventListener("pointerleave", onPointerLeave, true);
   document.addEventListener("click", onClick);
+  document.addEventListener("scroll", hideTooltip, { capture: true, passive: true });
+  window.addEventListener("resize", hideTooltip, { passive: true });
   loadSettings();
   scheduleUpdate();
 })();

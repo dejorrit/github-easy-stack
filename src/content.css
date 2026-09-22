@@ -207,7 +207,44 @@ ul[data-ges-active] > li.ges-synthetic > .ges-body {
   align-self: center;
   /* Claims whatever is left of the row, so it sits against the right edge. */
   margin-left: auto;
-  padding-left: 8px;
+  padding-left: 12px;
+}
+
+/* The donut's legend: one row per status, in its own colour. Positioned in content.js. */
+.ges-tooltip {
+  padding: 8px 10px;
+  border: 1px solid var(--borderColor-default, #3d444d);
+  border-radius: 6px;
+  background-color: var(--overlay-bgColor, var(--bgColor-default, #0d1117));
+  box-shadow: var(--shadow-floating-small, 0 6px 12px -3px #010409a6);
+  color: var(--fgColor-default, #f0f6fc);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.ges-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ges-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ges-status);
+}
+
+.ges-legend-count {
+  min-width: 2ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ges-legend-label {
+  color: var(--fgColor-muted, #9198a1);
 }
 
 .ges-arc {

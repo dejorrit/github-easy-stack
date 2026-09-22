@@ -4,8 +4,8 @@
   const STATUSES = ["merged", "ready", "waiting", "blocked", "draft", "unknown", "closed"];
   // Clockwise from 12 o'clock in the donut: what needs attention first, what is done last.
   const RING_ORDER = ["blocked", "waiting", "ready", "draft", "unknown", "merged", "closed"];
-  // A 22px donut draws ~0.15px of arc per degree, so anything under ~12deg is a hairline.
-  const MIN_SLICE_DEGREES = 12;
+  // A 36px donut draws ~0.24px of arc per degree, so anything under ~8deg is a hairline.
+  const MIN_SLICE_DEGREES = 8;
 
   function parseStackLabel(label) {
     const match = /position\s+(\d+)\s+of\s+(\d+)/i.exec(label || "");
