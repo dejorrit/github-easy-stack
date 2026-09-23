@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GitHub Easy Stack",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Groups stacked pull requests in GitHub pull request lists, with fold and progress per stack.",
   "permissions": ["storage"],
   "browser_specific_settings": {
