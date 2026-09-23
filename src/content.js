@@ -7,8 +7,25 @@
   const REVIEW_SELECTOR = '[data-testid="review-decision-icon"] button[aria-label]';
   const CHECKS_SELECTOR = 'button[data-testid="checks-status-badge-button"]';
   const DRAFT_SELECTOR = 'svg[aria-label="Draft pull request"], svg.octicon-git-pull-request-draft';
+  const TIME_SELECTOR = "relative-time[datetime]";
   const LEADING_ICON_SELECTOR = '[class*="LeadingContent-module__container"] svg';
   const MAX_CONCURRENT_FETCHES = 3;
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  // Outer 28px, 5px ring: the hole stays 18px so the shape still reads as a donut.
+  const DONUT_SIZE = 28;
+  const DONUT_RADIUS = 11.5;
+  const DONUT_STROKE = 5;
+  // Drawn as presentation attributes so the ring survives even if the stylesheet does not load;
+  // content.css overrides the stroke with GitHub's own theme variable when it does.
+  const STATUS_COLORS = {
+    merged: "#ab7df8",
+    ready: "#3fb950",
+    waiting: "#d29922",
+    blocked: "#f85149",
+    draft: "#9198a1",
+    unknown: "#656c76",
+    closed: "#656c76",
+  };
   const RETRY_FAILED_AFTER_MS = 60_000;
 
   const STATUS_LABELS = {
@@ -159,13 +176,13 @@
   // ---- Rendering --------------------------------------------------------------
 
   function svgIcon(path, className) {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const svg = document.createElementNS(SVG_NS, "svg");
     svg.setAttribute("viewBox", "0 0 16 16");
     svg.setAttribute("width", "16");
     svg.setAttribute("height", "16");
     svg.setAttribute("aria-hidden", "true");
     svg.setAttribute("class", className);
-    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const p = document.createElementNS(SVG_NS, "path");
     p.setAttribute("d", path);
     svg.appendChild(p);
     return svg;
@@ -178,9 +195,22 @@
     return node;
   }
 
+  // The row's metadata line reads "#7130 · renovate[bot] opened 11 minutes ago". GitHub has renamed
+  // the elements around it before, so walk out from the timestamp and fall back to the author filter link.
+  function readAuthor(li, time) {
+    for (let scope = time?.parentElement, depth = 0; scope && depth < 3; scope = scope.parentElement, depth++) {
+      const login = core.parseRowAuthor(scope.textContent);
+      if (login) return login;
+    }
+    const href = li.querySelector('a[href*="author%3A"], a[href*="author:"]')?.getAttribute("href");
+    const match = /author(?:%3A|:)(?:app(?:%2F|\/))?([^&+\s"]+)/i.exec(href || "");
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+
   function readRow(li) {
     const pull = core.parsePullHref(li.querySelector(TITLE_SELECTOR)?.getAttribute("href"));
     const badge = core.parseStackLabel(li.querySelector(BADGE_SELECTOR)?.getAttribute("aria-label"));
+    const time = li.querySelector(TIME_SELECTOR);
     return {
       li,
       pull,
@@ -188,6 +218,8 @@
       review: core.parseReviewLabel(li.querySelector(REVIEW_SELECTOR)?.getAttribute("aria-label")),
       checks: core.parseChecksLabel(li.querySelector(CHECKS_SELECTOR)?.getAttribute("aria-label")),
       draft: Boolean(li.querySelector(DRAFT_SELECTOR)),
+      author: readAuthor(li, time),
+      createdAt: Date.parse(time?.getAttribute("datetime") || "") || null,
     };
   }
 
@@ -246,8 +278,121 @@
     body.replaceChildren(...build());
   }
 
-  function renderHeader(node, stack, summary, item) {
-    const signature = JSON.stringify([stack.id, stack.size, stack.baseBranch, item.folded, summary.counts]);
+  function renderDonut(counts) {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", `0 0 ${DONUT_SIZE} ${DONUT_SIZE}`);
+    svg.setAttribute("width", String(DONUT_SIZE));
+    svg.setAttribute("height", String(DONUT_SIZE));
+    svg.setAttribute("aria-hidden", "true");
+    const center = DONUT_SIZE / 2;
+    const circumference = 2 * Math.PI * DONUT_RADIUS;
+    for (const segment of core.donutSegments(counts)) {
+      const arc = document.createElementNS(SVG_NS, "circle");
+      arc.setAttribute("class", `ges-arc ges-s-${segment.status}`);
+      arc.setAttribute("cx", String(center));
+      arc.setAttribute("cy", String(center));
+      arc.setAttribute("r", String(DONUT_RADIUS));
+      arc.setAttribute("fill", "none");
+      arc.setAttribute("stroke", STATUS_COLORS[segment.status]);
+      arc.setAttribute("stroke-width", String(DONUT_STROKE));
+      const length = (segment.angle / 360) * circumference;
+      arc.setAttribute("stroke-dasharray", `${length} ${circumference - length}`);
+      arc.setAttribute("stroke-dashoffset", String((-segment.start / 360) * circumference));
+      arc.setAttribute("transform", `rotate(-90 ${center} ${center})`); // 0 degrees at 12 o'clock
+      svg.appendChild(arc);
+    }
+    return svg;
+  }
+
+  // A hover card rather than the title attribute: the counts only read as a legend when each
+  // one carries its own colour, and a native title is plain text. One node, reused, parked on
+  // <body> so nothing GitHub wraps the list in can clip it.
+  let tooltip = null;
+  let tooltipOwner = null;
+
+  function tooltipNode() {
+    if (tooltip?.isConnected) return tooltip;
+    tooltip = el("div", "ges-tooltip");
+    // Structure inline, looks in content.css: a stylesheet that fails to arrive must not leave
+    // a legend parked in the corner of the page.
+    Object.assign(tooltip.style, { position: "fixed", display: "none", zIndex: "2147483647", pointerEvents: "none" });
+    document.body.appendChild(tooltip);
+    return tooltip;
+  }
+
+  // Three cells per status, dropped straight into the card's grid so dots, counts and labels
+  // line up down their own columns.
+  function legendRow(status, count) {
+    const dot = el("span", `ges-legend-dot ges-s-${status}`);
+    // The variable is the stylesheet's themed colour, the literal what is left without it, and
+    // the size has to come along or there would be nothing for either to colour.
+    Object.assign(dot.style, {
+      width: "8px",
+      height: "8px",
+      borderRadius: "50%",
+      background: `var(--ges-status, ${STATUS_COLORS[status]})`,
+    });
+    return [dot, el("span", "ges-legend-count", String(count)), el("span", "ges-legend-label", STATUS_LABELS[status])];
+  }
+
+  function showTooltip(owner) {
+    const counts = owner.gesCounts;
+    if (!counts) return;
+    const node = tooltipNode();
+    node.replaceChildren(...core.STATUSES.filter((s) => counts[s] > 0).flatMap((s) => legendRow(s, counts[s])));
+    node.style.display = "grid";
+    // Under the donut and right-aligned with it, flipped above when the row sits low.
+    const anchor = owner.getBoundingClientRect();
+    const box = node.getBoundingClientRect();
+    const below = anchor.bottom + 6;
+    const top = below + box.height > innerHeight - 8 ? Math.max(8, anchor.top - box.height - 6) : below;
+    node.style.top = `${top}px`;
+    node.style.left = `${Math.max(8, Math.min(anchor.right - box.width, innerWidth - box.width - 8))}px`;
+    tooltipOwner = owner;
+  }
+
+  function hideTooltip() {
+    if (!tooltipOwner) return;
+    tooltip.style.display = "none";
+    tooltipOwner = null;
+  }
+
+  function metaItem(text, title) {
+    const item = el("span", "ges-meta-item", text);
+    if (title) item.title = title;
+    return item;
+  }
+
+  // Order matters: the line is one row tall with overflow hidden, so whatever wraps is dropped,
+  // and the next action - the only thing here you can act on - is first in line to survive.
+  function metaLine(meta) {
+    const line = el("div", "ges-meta");
+    if (meta.next) {
+      const item = el("span", "ges-meta-item");
+      const link = el("a", "ges-link", `#${meta.next.number}`);
+      if (meta.next.url) link.href = meta.next.url;
+      item.append("next: ", link, ` ${meta.next.label}`);
+      line.appendChild(item);
+    } else {
+      line.appendChild(metaItem("all merged"));
+    }
+    if (meta.author) {
+      const item = el("span", "ges-meta-item");
+      const link = el("a", "ges-link", meta.author.login);
+      link.href = core.authorHref(meta.author.login);
+      item.append(link);
+      if (meta.author.others) item.append(` +${meta.author.others}`);
+      line.appendChild(item);
+    }
+    if (meta.age) {
+      line.appendChild(metaItem(`${meta.age.oldest} old`, meta.age.oldestTitle));
+      if (meta.age.newest) line.appendChild(metaItem(`newest ${meta.age.newest}`, meta.age.newestTitle));
+    }
+    return line;
+  }
+
+  function renderHeader(node, stack, summary, item, meta) {
+    const signature = JSON.stringify([stack.id, stack.size, stack.baseBranch, item.folded, summary.counts, meta]);
     renderBody(node, signature, () => {
       const fold = el("button", "ges-fold");
       fold.type = "button";
@@ -259,23 +404,42 @@
       title.append(svgIcon(ICONS.stack, "ges-stack-icon"), `Stack of ${stack.size}`);
       if (stack.baseBranch) title.appendChild(el("span", "ges-muted", ` into ${stack.baseBranch}`));
 
-      const described = core.STATUSES.filter((s) => summary.counts[s] > 0);
-      const bar = el("span", "ges-progress");
-      bar.setAttribute("role", "img");
-      bar.setAttribute("aria-label", described.map((s) => `${summary.counts[s]} ${STATUS_LABELS[s]}`).join(", "));
-      const counts = el("span", "ges-counts");
-      for (const status of described) {
-        const segment = el("span", `ges-segment ges-s-${status}`);
-        segment.style.flexGrow = String(summary.counts[status]);
-        segment.title = `${summary.counts[status]} ${STATUS_LABELS[status]}`;
-        bar.appendChild(segment);
-        const count = el("span", "ges-count");
-        count.append(el("span", `ges-count-dot ges-s-${status}`), `${summary.counts[status]} ${STATUS_LABELS[status]}`);
-        counts.appendChild(count);
-      }
+      const main = el("div", "ges-header-main");
+      main.append(title, metaLine(meta));
 
-      return [fold, title, bar, counts];
+      const described = core.STATUSES.filter((s) => summary.counts[s] > 0);
+      const counts = described.map((s) => `${summary.counts[s]} ${STATUS_LABELS[s]}`);
+      const donut = el("span", "ges-donut");
+      // The counts used to be spelled out in the header; the hover legend is where they live
+      // now, one per line, and the label keeps them in the accessibility tree.
+      donut.setAttribute("role", "img");
+      donut.setAttribute("aria-label", `Stack progress: ${counts.join(", ")}`);
+      donut.gesCounts = summary.counts;
+      donut.appendChild(renderDonut(summary.counts));
+
+      return [fold, main, donut];
     });
+  }
+
+  // Author and age exist only on the rows GitHub put on this page, so both describe what is visible.
+  function buildMeta(stack, rowsByNumber, summary) {
+    const visible = stack.pulls.map((pull) => rowsByNumber.get(pull.number)).filter(Boolean);
+    const span = core.ageSpan(visible.map((row) => row.createdAt));
+    const next = core.nextAction(stack, summary.statuses);
+    const now = Date.now();
+    const oldest = span && core.formatDuration(now - span.oldest);
+    const newest = span && core.formatDuration(now - span.newest);
+    return {
+      author: core.authorSummary(visible.map((row) => row.author)),
+      age: span && {
+        oldest,
+        // Only worth a second item when it actually reads differently.
+        newest: newest === oldest ? null : newest,
+        oldestTitle: `oldest on this page: ${new Date(span.oldest).toLocaleString()}`,
+        newestTitle: `newest on this page: ${new Date(span.newest).toLocaleString()}`,
+      },
+      next: next && { number: next.pull.number, url: next.pull.url, label: STATUS_LABELS[next.status] },
+    };
   }
 
   function renderGhost(node, pull) {
@@ -302,14 +466,16 @@
     list.querySelectorAll(":scope > li[data-ges-synthetic]").forEach((node) => node.remove());
     list.querySelectorAll(":scope > li").forEach((li) => {
       li.querySelector(":scope > .ges-rail")?.remove();
-      ["data-ges-stack", "data-ges-hl", "data-ges-hidden"].forEach((name) => li.removeAttribute(name));
+      ["data-ges-stack", "data-ges-hl", "data-ges-hidden", "data-ges-loading"].forEach((name) => li.removeAttribute(name));
       li.style.removeProperty("order");
     });
     list.removeAttribute("data-ges-active");
     list.style.removeProperty("--ges-base-pad");
+    list.style.removeProperty("--ges-base-pad-right");
   }
 
   function updateList(list) {
+    if (tooltipOwner && !tooltipOwner.isConnected) hideTooltip();
     const rows = [...list.children]
       .filter((node) => node.tagName === "LI" && !node.hasAttribute("data-ges-synthetic"))
       .map(readRow);
@@ -327,21 +493,35 @@
     });
     pumpFetches();
 
+    // Grouping is unknown until the fetch lands, so no header can be placed yet; mark the rows
+    // that are about to move instead, and the reflow reads as caused rather than random.
+    const markLoading = () =>
+      rows.forEach((row) => setFlag(row.li, "data-ges-loading", Boolean(row.badge && row.pull && !cachedStack(row.pull))));
+
     if (stacks.size === 0) {
       if (list.hasAttribute("data-ges-active")) clearList(list);
+      markLoading();
       return;
     }
 
     if (!list.hasAttribute("data-ges-active")) {
-      list.style.setProperty("--ges-base-pad", getComputedStyle(rows[0].li).paddingLeft);
+      const rowPadding = getComputedStyle(rows[0].li);
+      list.style.setProperty("--ges-base-pad", rowPadding.paddingLeft);
+      // So the donut lines up with whatever GitHub keeps at the right of its own rows.
+      list.style.setProperty("--ges-base-pad-right", rowPadding.paddingRight);
       list.setAttribute("data-ges-active", "");
     }
 
+    markLoading();
+
     const summaries = new Map();
+    const metas = new Map();
     for (const stack of stacks.values()) {
       const rowsByNumber = new Map();
       rows.forEach((row, i) => rowRefs[i].stackId === stack.id && rowsByNumber.set(row.pull.number, row));
-      summaries.set(stack.id, core.summarizeStack(stack, rowsByNumber));
+      const summary = core.summarizeStack(stack, rowsByNumber);
+      summaries.set(stack.id, summary);
+      metas.set(stack.id, buildMeta(stack, rowsByNumber, summary));
     }
 
     const items = core.buildDisplay(rowRefs, stacks, isFolded);
@@ -352,7 +532,7 @@
         node = rows[item.rowIndex].li;
       } else if (item.kind === "header") {
         node = syntheticNode(list, `header:${item.stackId}`, "ges-header");
-        renderHeader(node, stacks.get(item.stackId), summaries.get(item.stackId), item);
+        renderHeader(node, stacks.get(item.stackId), summaries.get(item.stackId), item, metas.get(item.stackId));
       } else {
         node = syntheticNode(list, `ghost:${item.stackId}:${item.pull.number}`, "ges-ghost");
         renderGhost(node, item.pull);
@@ -379,6 +559,8 @@
   }
 
   function onPointerOver(event) {
+    const donut = event.target.closest?.(".ges-donut");
+    if (donut !== tooltipOwner) donut ? showTooltip(donut) : hideTooltip();
     const list = event.target.closest?.(LIST_SELECTOR);
     if (!list) return;
     const li = event.target.closest(`${LIST_SELECTOR} > li`);
@@ -389,6 +571,7 @@
   }
 
   function onPointerLeave(event) {
+    hideTooltip();
     const list = event.target;
     if (!(list instanceof Element) || !list.matches(LIST_SELECTOR)) return;
     list.dataset.gesHover = "";
@@ -442,6 +625,8 @@
   document.addEventListener("pointerover", onPointerOver, true);
   document.addEventListener("pointerleave", onPointerLeave, true);
   document.addEventListener("click", onClick);
+  document.addEventListener("scroll", hideTooltip, { capture: true, passive: true });
+  window.addEventListener("resize", hideTooltip, { passive: true });
   loadSettings();
   scheduleUpdate();
 })();

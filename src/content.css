@@ -84,7 +84,8 @@ ul[data-ges-active] > li[data-ges-hl]:not(.ges-header) {
 
 ul[data-ges-active] > li.ges-synthetic {
   list-style: none;
-  padding: 6px 16px 6px calc(max(var(--ges-base-pad, 0px), 16px) + var(--ges-gutter)) !important;
+  padding: 6px max(var(--ges-base-pad-right, 16px), 16px) 6px
+    calc(max(var(--ges-base-pad, 0px), 16px) + var(--ges-gutter)) !important;
   border-top: 1px solid var(--borderColor-muted, #30363db3);
   font-size: 12px;
   line-height: 20px;
@@ -109,8 +110,41 @@ ul[data-ges-active] > li.ges-header {
 }
 
 .ges-header .ges-body {
+  gap: 16px;
+}
+
+/* GitHub's list item is a block today, but claim the full row either way. */
+ul[data-ges-active] > li.ges-synthetic > .ges-body {
+  flex: 1;
+}
+
+.ges-header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* One line tall with overflow hidden: an item that no longer fits wraps out of sight, which
+   drops the line right to left and takes its separator with it. */
+.ges-meta {
+  display: flex;
   flex-wrap: wrap;
-  gap: 8px 20px;
+  height: 18px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--fgColor-muted, #9198a1);
+}
+
+.ges-meta-item {
+  white-space: nowrap;
+}
+
+.ges-meta-item + .ges-meta-item::before {
+  content: "\00b7";
+  margin: 0 10px;
 }
 
 .ges-header {
@@ -168,45 +202,56 @@ ul[data-ges-active] > li.ges-header {
   color: var(--fgColor-muted, #9198a1);
 }
 
-.ges-progress {
+.ges-donut {
   display: inline-flex;
-  gap: 2px;
-  width: 160px;
-  height: 8px;
-  border-radius: 4px;
-  overflow: hidden;
+  align-self: center;
+  /* Claims whatever is left of the row, so it sits against the right edge. */
+  margin-left: auto;
+  padding-left: 12px;
 }
 
-.ges-segment {
-  flex-basis: 0;
-  min-width: 4px;
-}
-
-.ges-counts {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-}
-
-.ges-count {
-  display: inline-flex;
+/* The donut's legend: one row per status, in its own colour. Positioned in content.js, which
+   also switches the grid on, so the three columns line up across every row. */
+.ges-tooltip {
+  grid-template-columns: auto auto auto;
   align-items: center;
-  gap: 4px;
+  gap: 4px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--borderColor-default, #3d444d);
+  border-radius: 6px;
+  background-color: var(--overlay-bgColor, var(--bgColor-default, #0d1117));
+  box-shadow: var(--shadow-floating-small, 0 6px 12px -3px #010409a6);
+  color: var(--fgColor-default, #f0f6fc);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
-.ges-count-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.ges-legend-dot {
+  background: var(--ges-status);
 }
 
-.ges-s-merged { background-color: var(--bgColor-done-emphasis, #8957e5); }
-.ges-s-ready { background-color: var(--bgColor-success-emphasis, #238636); }
-.ges-s-waiting { background-color: var(--bgColor-attention-emphasis, #9e6a03); }
-.ges-s-blocked { background-color: var(--bgColor-danger-emphasis, #da3633); }
-.ges-s-draft { background-color: var(--bgColor-neutral-emphasis, #656c76); }
-.ges-s-unknown { background-color: var(--borderColor-default, #3d444d); }
-.ges-s-closed { background-color: var(--bgColor-neutral-muted, #656c7633); }
+.ges-legend-count {
+  justify-self: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.ges-legend-label {
+  color: var(--fgColor-muted, #9198a1);
+}
+
+.ges-arc {
+  fill: none;
+  stroke: var(--ges-status);
+}
+
+.ges-s-merged { --ges-status: var(--fgColor-done, #ab7df8); }
+.ges-s-ready { --ges-status: var(--fgColor-success, #3fb950); }
+.ges-s-waiting { --ges-status: var(--fgColor-attention, #d29922); }
+.ges-s-blocked { --ges-status: var(--fgColor-danger, #f85149); }
+.ges-s-draft { --ges-status: var(--fgColor-muted, #9198a1); }
+.ges-s-unknown { --ges-status: var(--fgColor-disabled, #656c76); }
+.ges-s-closed { --ges-status: var(--fgColor-disabled, #656c76); }
 
 .ges-link {
   color: var(--fgColor-default, #f0f6fc);
@@ -235,3 +280,38 @@ ul[data-ges-active] > li.ges-header {
 
 .ges-open { color: var(--fgColor-open, #3fb950); }
 .ges-draft { color: var(--fgColor-draft, #9198a1); }
+
+/* ---- Motion ---- */
+
+/* Which rows form a stack is unknown until the fetch lands, so the rows that are about to
+   move pulse in place; the header fades in once it can be put somewhere true. */
+li[data-ges-loading] {
+  animation: ges-pulse 1.4s ease-in-out infinite;
+}
+
+ul[data-ges-active] > li.ges-header {
+  animation: ges-enter 160ms ease-out both;
+}
+
+@keyframes ges-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@keyframes ges-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  li[data-ges-loading],
+  ul[data-ges-active] > li.ges-header {
+    animation: none;
+  }
+
+  .ges-chevron,
+  .ges-line,
+  .ges-dot {
+    transition: none;
+  }
+}

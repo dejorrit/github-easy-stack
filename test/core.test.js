@@ -97,3 +97,82 @@ test("buildDisplay hides members of folded stacks but keeps the header", () => {
   assert.deepEqual([items[0].railUp, items[0].railDown], [false, false]);
   assert.notEqual(items[0].colorIndex, items[3].colorIndex);
 });
+
+test("normalizeStack keeps the head branch and position the payload gives for free", () => {
+  const stack = core.normalizeStack({
+    id: 1,
+    size: 2,
+    position: 2,
+    baseBranch: "main",
+    pulls: [{ number: 9, title: "t", state: "OPEN", headBranch: "feature/top" }, { number: 8, title: "t", state: "MERGED" }],
+  });
+  assert.equal(stack.position, 2);
+  assert.equal(stack.pulls[0].headBranch, "feature/top");
+  assert.equal(stack.pulls[1].headBranch, null);
+});
+
+test("parseRowAuthor reads the login out of a row's metadata line", () => {
+  assert.equal(core.parseRowAuthor("#7130 · renovate[bot] opened 11 minutes ago"), "renovate[bot]");
+  assert.equal(core.parseRowAuthor("#7108 · dejorrit opened 4 days ago · Approved"), "dejorrit");
+  assert.equal(core.parseRowAuthor("#479 opened 3 days ago by mira"), "mira");
+  assert.equal(core.parseRowAuthor("#7126 · xiduzo merged 2 hours ago"), "xiduzo");
+  assert.equal(core.parseRowAuthor("Fix #12 opened door handling"), null);
+  assert.equal(core.parseRowAuthor(""), null);
+});
+
+test("authorSummary names the busiest author and counts the rest", () => {
+  assert.deepEqual(core.authorSummary(["mira"]), { login: "mira", others: 0 });
+  assert.deepEqual(core.authorSummary(["mira", "jo", "mira"]), { login: "mira", others: 1 });
+  // logins arrive top of the stack first, so a tie goes to the last one: the bottom layer.
+  assert.deepEqual(core.authorSummary(["mira", "jo"]), { login: "jo", others: 1 });
+  assert.equal(core.authorSummary([null, undefined]), null);
+  assert.equal(core.authorSummary([]), null);
+});
+
+test("ageSpan spans the members that are on the page", () => {
+  assert.deepEqual(core.ageSpan([300, 100, 200]), { oldest: 100, newest: 300 });
+  assert.deepEqual(core.ageSpan([100, null, NaN]), { oldest: 100, newest: 100 });
+  assert.equal(core.ageSpan([null]), null);
+});
+
+test("formatDuration stays short and never rounds up to a lie", () => {
+  assert.equal(core.formatDuration(5_000), "1m");
+  assert.equal(core.formatDuration(59 * 60_000), "59m");
+  assert.equal(core.formatDuration(13 * 3600_000), "13h");
+  assert.equal(core.formatDuration(47 * 3600_000), "1d");
+  assert.equal(core.formatDuration(11 * 86400_000), "11d");
+  assert.equal(core.formatDuration(90 * 86400_000), "3mo");
+  assert.equal(core.formatDuration(800 * 86400_000), "2y");
+});
+
+test("nextAction points at the lowest member that has not merged", () => {
+  const stack = stackOf(1, [open(4), open(3), merged(2), merged(1)]);
+  const statuses = new Map([[3, "blocked"]]);
+  assert.deepEqual(core.nextAction(stack, statuses), { pull: stack.pulls[1], status: "blocked" });
+  assert.equal(core.nextAction(stack, new Map()).status, "unknown");
+  assert.equal(core.nextAction(stackOf(2, [merged(2), merged(1)]), new Map()), null);
+});
+
+test("donutSegments keeps a thin slice visible without leaving a gap in the ring", () => {
+  const counts = (partial) => ({ ...Object.fromEntries(core.STATUSES.map((s) => [s, 0])), ...partial });
+  assert.deepEqual(core.donutSegments(counts({})), []);
+  const half = core.donutSegments(counts({ merged: 1, ready: 1 }));
+  assert.deepEqual(half.map((s) => [s.status, s.start, s.angle]), [["ready", 0, 180], ["merged", 180, 180]]);
+
+  const thin = core.donutSegments(counts({ merged: 19, blocked: 1 }), 40);
+  // blocked leads, at 12 o'clock, and is pinned to the minimum it was thinner than.
+  assert.deepEqual(thin.map((s) => s.status), ["blocked", "merged"]);
+  assert.equal(thin[0].angle, 40);
+  assert.equal(thin[0].angle + thin[1].angle, 360);
+
+  const many = core.donutSegments(counts({ merged: 40, ready: 1, waiting: 1, blocked: 1, draft: 1, unknown: 1, closed: 1 }));
+  assert.equal(Math.round(many.reduce((sum, s) => sum + s.angle, 0)), 360);
+  assert.ok(many.every((s) => s.angle >= core.MIN_SLICE_DEGREES - 1e-9));
+  assert.deepEqual(many.map((s) => s.status), core.RING_ORDER);
+});
+
+test("authorHref points at a profile, or at /apps for a bot", () => {
+  assert.equal(core.authorHref("xiduzo"), "/xiduzo");
+  assert.equal(core.authorHref("renovate[bot]"), "/apps/renovate");
+  assert.equal(core.authorHref(null), null);
+});
